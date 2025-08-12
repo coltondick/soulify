@@ -70,9 +70,15 @@ base_dir = os.path.dirname(os.path.abspath(__file__))
 
 # configs live in /config (or CONFIG_DIR override)
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/config")
-soulify_conf_path = os.path.join(CONFIG_DIR, "soulify.conf")
-pdscript_conf_path = os.path.join(CONFIG_DIR, "pdscript.conf")
-sldlConfigPath = os.path.join(CONFIG_DIR, "sldl.conf")   # if you use this elsewhere
+soulify_conf_path   = os.path.join(CONFIG_DIR, 'soulify.conf')
+pdscript_conf_path  = os.path.join(CONFIG_DIR, 'pdscript.conf')
+sldlConfigPath      = os.path.join(CONFIG_DIR, 'sldl.conf')
+
+# Log the paths so we can debug
+app.logger.info(f"CONFIG_DIR={CONFIG_DIR}")
+app.logger.info(f"sldl.conf -> {sldlConfigPath}")
+app.logger.info(f"soulify.conf -> {soulify_conf_path}")
+app.logger.info(f"pdscript.conf -> {pdscript_conf_path}")
 
 # scripts stay packaged with the app
 postdownload_scripts_dir = os.path.join(base_dir, "scripts", "postdownload")
@@ -158,24 +164,30 @@ def load_spotify_auth() -> tuple[str, str, str]:
 
 CLIENT_ID, CLIENT_SECRET, REDIRECT_URI = load_spotify_auth()
 
+def _ensure_parent_dir(path: str):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
 
 # Function to write soulify.conf (missing in original code)
-def write_soulify_conf(settings):
+def write_soulify_conf(settings: dict, path: str | None = None):
+    path = path or os.path.join(CONFIG_DIR, 'soulify.conf')
+    _ensure_parent_dir(path)
     config = configparser.ConfigParser()
     config['PostDownloadProcessing'] = {
-        'UpdatemetadataWithMusicBrainz': str(settings['UpdatemetadataWithMusicBrainz']),
-        'UpdateLibraryMetadataAndRefreshJellyfin': str(settings['UpdateLibraryMetadataAndRefreshJellyfin'])
+        'UpdatemetadataWithMusicBrainz': str(settings.get('UpdatemetadataWithMusicBrainz', False)),
+        'UpdateLibraryMetadataAndRefreshJellyfin': str(settings.get('UpdateLibraryMetadataAndRefreshJellyfin', False)),
     }
     try:
-        with open(soulify_conf_path, 'w') as configfile:
-            config.write(configfile)
+        with open(path, 'w', encoding='utf-8') as f:
+            config.write(f)
     except IOError as e:
-        logging.error(f"Error writing to soulify.conf: {e}")
+        logging.error(f"Error writing to {path}: {e}")
 
 # Function to write sldl.conf
-def write_sldl_conf(settings):
+def write_sldl_conf(settings: dict, path: str | None = None):
+    path = path or os.path.join(CONFIG_DIR, 'sldl.conf')
+    _ensure_parent_dir(path)
     try:
-        with open(sldlConfigPath, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write("# Soulseek Credentials (required)\n")
             f.write(f"username = {settings.get('username', '')}\n")
             f.write(f"password = {settings.get('password', '')}\n")
@@ -191,25 +203,29 @@ def write_sldl_conf(settings):
             f.write("\n# Output Settings\n")
             f.write(f"m3u = {settings.get('m3u', 'none')}\n")
     except IOError as e:
-        logging.error(f"Error writing to sldl.conf: {e}")
+        logging.error(f"Error writing to {path}: {e}")
 
 
 # Function to write pdscript.conf
-def write_pdscript_conf(settings):
+def write_pdscript_conf(settings: dict, path: str | None = None):
+    path = path or os.path.join(CONFIG_DIR, 'pdscript.conf')
+    _ensure_parent_dir(path)
     config = configparser.ConfigParser()
     config['Paths'] = {
-        'destination_root': settings.get('destination_root', '/mnt/EXTHDD/Media/Audio/Music/Music - Managed (Lidarr)/'),
-        'new_artists_dir': settings.get('new_artists_dir', '/mnt/EXTHDD/Download/Music New Artists/')
+        'destination_root': settings.get('destination_root', '/downloads/Music Sorting'),
+        'new_artists_dir': settings.get('new_artists_dir', '/downloads/Music New Artists'),
+        'unknown_albums_dir': settings.get('unknown_albums_dir', '/downloads/Music Unknown Album'),
     }
     config['API Details'] = {
-        'API_BASE_URL': settings.get('API_BASE_URL', 'http://192.168.0.7:8096'),
-        'API_AUTH_TOKEN': settings.get('API_AUTH_TOKEN', 'b30092879a9646eb9e676b2922c9c1e4')
+        'API_BASE_URL': settings.get('API_BASE_URL', ''),
+        'API_AUTH_TOKEN': settings.get('API_AUTH_TOKEN', ''),
+        'main_music_library_id': settings.get('main_music_library_id', ''),
     }
     try:
-        with open(pdscript_conf_path, 'w') as configfile:
-            config.write(configfile)
+        with open(path, 'w', encoding='utf-8') as f:
+            config.write(f)
     except IOError as e:
-        logging.error(f"Error writing to pdscript.conf: {e}")
+        logging.error(f"Error writing to {path}: {e}")
 
 def clean_special_chars(query):
     # First remove all commas
