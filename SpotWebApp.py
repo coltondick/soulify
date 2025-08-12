@@ -112,29 +112,40 @@ def parse_sldl_conf(path: str) -> dict:
 def read_pdscript_conf(path: str | None = None) -> dict:
     """
     Read pdscript.conf. Tries INI sections first; if missing, falls back
-    to key=value and maps known keys into sections.
+    to key=value and maps known keys into sections. Environment variables,
+    if present, override file values for API_BASE_URL and API_AUTH_TOKEN.
     """
     path = path or os.path.join(CONFIG_DIR, "pdscript.conf")
     out = {"Paths": {}, "API Details": {}}
-    if not os.path.exists(path):
-        return out
+    if os.path.exists(path):
+        parser = configparser.ConfigParser()
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                parser.read_file(f)
+            for sec in ("Paths", "API Details"):
+                if parser.has_section(sec):
+                    out[sec] = {k: v for k, v in parser.items(sec)}
+        except configparser.MissingSectionHeaderError:
+            flat = _read_kv_file(path)
+            for k, v in flat.items():
+                if k in {"destination_root", "source_route", "new_artists_dir", "Music_Download_Folder", "unknown_albums_dir"}:
+                    out["Paths"][k] = v
+                elif k in {"api_base_url", "api_auth_token", "main_music_library_id", "API_BASE_URL", "API_AUTH_TOKEN"}:
+                    out["API Details"][k] = v
 
-    parser = configparser.ConfigParser()
-    try:
-        with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            parser.read_file(f)
-        for sec in ("Paths", "API Details"):
-            if parser.has_section(sec):
-                out[sec] = {k: v for k, v in parser.items(sec)}
-        return out
-    except configparser.MissingSectionHeaderError:
-        flat = _read_kv_file(path)
-        for k, v in flat.items():
-            if k in {"destination_root", "source_route", "new_artists_dir", "Music_Download_Folder", "unknown_albums_dir"}:
-                out["Paths"][k] = v
-            elif k in {"api_base_url", "api_auth_token", "main_music_library_id"}:
-                out["API Details"][k] = v
-        return out
+    # ENV OVERRIDES (take precedence if set)
+    env_base = os.getenv("API_BASE_URL")
+    env_token = os.getenv("API_AUTH_TOKEN")
+    if env_base:
+        out["API Details"]["API_BASE_URL"] = env_base
+        # also normalize lowercase key some callers use
+        out["API Details"]["api_base_url"] = env_base
+    if env_token:
+        out["API Details"]["API_AUTH_TOKEN"] = env_token
+        out["API Details"]["api_auth_token"] = env_token
+
+    return out
+
 
 def load_spotify_auth() -> tuple[str, str, str]:
     """
@@ -216,8 +227,8 @@ def write_pdscript_conf(settings: dict, path: str | None = None):
         'unknown_albums_dir': settings.get('unknown_albums_dir', '/downloads/Music Unknown Album'),
     }
     config['API Details'] = {
-        'API_BASE_URL': settings.get('API_BASE_URL', ''),
-        'API_AUTH_TOKEN': settings.get('API_AUTH_TOKEN', ''),
+        'API_BASE_URL': settings.get('API_BASE_URL', os.getenv('API_BASE_URL', '')),
+        'API_AUTH_TOKEN': settings.get('API_AUTH_TOKEN', os.getenv('API_AUTH_TOKEN', '')),
         'main_music_library_id': settings.get('main_music_library_id', ''),
     }
     try:
@@ -225,6 +236,7 @@ def write_pdscript_conf(settings: dict, path: str | None = None):
             config.write(f)
     except IOError as e:
         logging.error(f"Error writing to {path}: {e}")
+
 
 def clean_special_chars(query):
     # First remove all commas
@@ -563,21 +575,21 @@ def refresh_spotify_token():
     return False
 
 
-def read_soulify_conf():
+def read_soulify_conf(path: str | None = None):
     """
     Returns a tuple:
         (update_with_mb: bool, update_library: bool)
 
-    Reads /app/soulify.conf (PostDownloadProcessing section) and falls back to False/False.
+    Reads soulify.conf (PostDownloadProcessing section) and falls back to False/False.
     """
+    cfg_path = path or soulify_conf_path
     update_with_mb = False
     update_library = False
 
-    if os.path.exists(soulify_conf_path):
+    if os.path.exists(cfg_path):
         cfg = configparser.ConfigParser()
         try:
-            cfg.read(soulify_conf_path)
-            # Section created by write_soulify_conf()
+            cfg.read(cfg_path)
             update_with_mb = cfg.getboolean(
                 'PostDownloadProcessing', 'UpdatemetadataWithMusicBrainz', fallback=False
             )
@@ -633,19 +645,33 @@ def settings():
         pdscript_settings = {
             'destination_root': request.form.get('destination_root'),
             'new_artists_dir': request.form.get('new_artists_dir'),
-            'API_BASE_URL': request.form.get('api_base_url'),
-            'API_AUTH_TOKEN': request.form.get('api_auth_token')
+            'API_BASE_URL': request.form.get('api_base_url') or os.getenv('API_BASE_URL', ''),
+            'API_AUTH_TOKEN': request.form.get('api_auth_token') or os.getenv('API_AUTH_TOKEN', ''),
         }
         write_pdscript_conf(pdscript_settings, pdscript_conf_path)
+
 
         return redirect(url_for('settings'))
 
     # GET request: load from config files
     sldl_settings = parse_sldl_conf(sldlConfigPath)
-    soulify_settings = read_soulify_conf(soulify_conf_path)
+
+    # read_soulify_conf returns a tuple; convert to dict for the template
+    upd_mb, upd_lib = read_soulify_conf(soulify_conf_path)
+    soulify_settings = {
+        'UpdatemetadataWithMusicBrainz': upd_mb,
+        'UpdateLibraryMetadataAndRefreshJellyfin': upd_lib,
+    }
+
     pdscript_settings = read_pdscript_conf(pdscript_conf_path)
 
-    return render_template('settings.html', sldl=sldl_settings, soulify=soulify_settings, pdscript=pdscript_settings)
+    return render_template(
+        'settings.html',
+        sldl=sldl_settings,
+        soulify=soulify_settings,
+        pdscript=pdscript_settings
+    )
+
 
 
 @app.route('/post_download_management')
@@ -1209,11 +1235,13 @@ def get_artists_by_genre():
 
 # Load the pdscript configuration to get Jellyfin details
 def get_pdscript_config():
-    config = configparser.ConfigParser()
-    config.read(pdscript_conf_path)
+    configp = configparser.ConfigParser()
+    configp.read(pdscript_conf_path)
+    base_url = os.getenv('API_BASE_URL') or configp.get('API Details', 'API_BASE_URL', fallback='')
+    token    = os.getenv('API_AUTH_TOKEN') or configp.get('API Details', 'API_AUTH_TOKEN', fallback='')
     return {
-        'api_base_url': config.get('API Details', 'API_BASE_URL'),
-        'api_auth_token': config.get('API Details', 'API_AUTH_TOKEN')
+        'api_base_url': base_url,
+        'api_auth_token': token,
     }
 
 @app.route('/jellyfin_check_artist', methods=['GET'])
