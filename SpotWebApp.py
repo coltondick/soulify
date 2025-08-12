@@ -65,20 +65,26 @@ app.secret_key = 'your_secret_key'
 
 command_process = None
 
-# Path to configuration and post-processing scripts
+# Paths
 base_dir = os.path.dirname(os.path.abspath(__file__))
-soulify_conf_path = os.path.join(base_dir, 'soulify.conf')
-postdownload_scripts_dir = os.path.join(base_dir, 'scripts', 'postdownload')
-run_all_script = os.path.join(postdownload_scripts_dir, 'RunAll.py')
-sort_move_music_script = os.path.join(postdownload_scripts_dir, 'Sort_MoveMusicDownloads.py')
-update_with_mb_script = os.path.join(postdownload_scripts_dir, 'UpdatewithMB.sh')
-pdscript_conf_path = os.path.join(base_dir, 'pdscript.conf')
+
+# configs live in /config (or CONFIG_DIR override)
+CONFIG_DIR = os.environ.get("CONFIG_DIR", "/config")
+soulify_conf_path = os.path.join(CONFIG_DIR, "soulify.conf")
+pdscript_conf_path = os.path.join(CONFIG_DIR, "pdscript.conf")
+sldlConfigPath = os.path.join(CONFIG_DIR, "sldl.conf")   # if you use this elsewhere
+
+# scripts stay packaged with the app
+postdownload_scripts_dir = os.path.join(base_dir, "scripts", "postdownload")
+run_all_script = os.path.join(postdownload_scripts_dir, "RunAll.py")
+sort_move_music_script = os.path.join(postdownload_scripts_dir, "Sort_MoveMusicDownloads.py")
+update_with_mb_script = os.path.join(postdownload_scripts_dir, "UpdatewithMB.sh"))
 
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
 
 
 
-# --- Simple key=value config readers ----------------------------------------
+# Simple key=value config readers
 def _read_kv_file(path: str) -> dict:
     """Read simple key=value files; ignores comments/blank lines/sections."""
     data = {}
@@ -573,10 +579,22 @@ def read_soulify_conf():
 def downloads():
     return render_template('downloads.html')
 
+def _coerce_bool_env(v: str | None, default: str = "false") -> str:
+    # Return "true"/"false" for radio inputs
+    if v is None:
+        return default
+    return "true" if str(v).strip().lower() in {"1", "true", "yes", "on"} else "false"
+
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
+    # Config directory: /config in Docker, or local dir outside Docker
+    CONFIG_DIR = os.environ.get("CONFIG_DIR", "/config")
+    sldlConfigPath = os.path.join(CONFIG_DIR, "sldl.conf")
+    soulify_conf_path = os.path.join(CONFIG_DIR, "soulify.conf")
+    pdscript_conf_path = os.path.join(CONFIG_DIR, "pdscript.conf")
+
     if request.method == 'POST':
-        # Process form submission for sldl.conf
+        # sldl.conf
         sldl_settings = {
             'username': request.form.get('username'),
             'password': request.form.get('password'),
@@ -587,32 +605,33 @@ def settings():
             'spotify-secret': request.form.get('spotify-secret'),
             'm3u': request.form.get('m3u')
         }
-        write_sldl_conf(sldl_settings)
+        write_sldl_conf(sldl_settings, sldlConfigPath)
 
-        # Process form submission for soulify.conf
+        # soulify.conf
         soulify_settings = {
             'UpdatemetadataWithMusicBrainz': request.form.get('UpdatemetadataWithMusicBrainz') == 'true',
             'UpdateLibraryMetadataAndRefreshJellyfin': request.form.get('UpdateLibraryMetadataAndRefreshJellyfin') == 'true'
         }
-        write_soulify_conf(soulify_settings)
+        write_soulify_conf(soulify_settings, soulify_conf_path)
 
-        # Process form submission for pdscript.conf
+        # pdscript.conf
         pdscript_settings = {
             'destination_root': request.form.get('destination_root'),
             'new_artists_dir': request.form.get('new_artists_dir'),
             'API_BASE_URL': request.form.get('api_base_url'),
             'API_AUTH_TOKEN': request.form.get('api_auth_token')
         }
-        write_pdscript_conf(pdscript_settings)
+        write_pdscript_conf(pdscript_settings, pdscript_conf_path)
 
         return redirect(url_for('settings'))
 
-    # For GET request, display current settings
+    # GET request: load from config files
     sldl_settings = parse_sldl_conf(sldlConfigPath)
-    soulify_settings = read_soulify_conf()
-    pdscript_settings = read_pdscript_conf()
+    soulify_settings = read_soulify_conf(soulify_conf_path)
+    pdscript_settings = read_pdscript_conf(pdscript_conf_path)
 
     return render_template('settings.html', sldl=sldl_settings, soulify=soulify_settings, pdscript=pdscript_settings)
+
 
 @app.route('/post_download_management')
 def post_download_management():
