@@ -59,8 +59,23 @@ active_commands = {}
 
 download_lock = threading.Lock()
 
+# Bootstrap configuration from environment variables
+def bootstrap_config_from_env():
+    cfg_dir = os.environ.get("CONFIG_DIR", "/config")
+    pd = os.path.join(cfg_dir, "pdscript.conf")
+    if not os.path.exists(pd):
+        write_pdscript_conf({
+            "destination_root": os.environ.get("DESTINATION_ROOT", "/downloads/Music Sorting"),
+            "new_artists_dir": os.environ.get("NEW_ARTISTS_DIR", "/downloads/Music New Artists"),
+            "unknown_albums_dir": os.environ.get("UNKNOWN_ALBUMS_DIR", "/downloads/Music Unknown Album"),
+            "API_BASE_URL": os.environ.get("API_BASE_URL", ""),
+            "API_AUTH_TOKEN": os.environ.get("API_AUTH_TOKEN", ""),
+            "main_music_library_id": os.environ.get("MAIN_MUSIC_LIBRARY_ID", ""),
+        }, pd)
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
+bootstrap_config_from_env()
 
 command_process = None
 
