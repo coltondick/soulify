@@ -1,0 +1,47 @@
+services:
+  soulify:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        REPO_URL: ${REPO_URL:-https://github.com/WB2024/soulify.git}
+        REPO_REF: ${REPO_REF:-main}
+    container_name: soulify
+    restart: unless-stopped
+    ports:
+      - ${FLASK_PORT:-5000}:5000
+    environment:
+      FLASK_PORT: ${FLASK_PORT:-5000}
+
+      # Use the URL you actually visit from your browser:
+      # e.g. http://192.168.1.5:5000 or http://my-host.local:5000
+      BASE_URL: ${BASE_URL:-http://192.168.1.5:5000}
+
+      # Spotify (optional unless you want login to work)
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
+
+      # Match EXACTLY what’s in Spotify app settings
+      SPOTIFY_REDIRECT_URI: ${SPOTIFY_REDIRECT_URI:-http://192.168.1.5:5000/callback}
+
+      # Soulseek
+      SLSK_USERNAME: ${SLSK_USERNAME:-}
+      SLSK_PASSWORD: ${SLSK_PASSWORD:-}
+
+      # Paths inside the container (persisted via volumes below)
+      DOWNLOAD_DIR: /downloads/Music Downloads
+      DESTINATION_ROOT: /downloads/Music Sorting
+      SOURCE_ROUTE: /downloads/Music Sorting
+      NEW_ARTISTS_DIR: /downloads/Music New Artists
+      UNKNOWN_ALBUMS_DIR: /downloads/Music Unknown Album
+
+      # Feature toggles
+      UPDATE_METADATA: "true"
+      JELLYFIN_REFRESH: "true"
+
+      # Let the app know where configs live
+      CONFIG_DIR: /config
+    volumes:
+      - ./soulify/config:/config
+      - ./soulify:/downloads
+    # user: "1000:1000"   # uncomment if you want host-user ownership on files
