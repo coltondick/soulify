@@ -12,6 +12,7 @@ services:
       - ${FLASK_PORT:-5000}:5000
     environment:
       FLASK_PORT: ${FLASK_PORT:-5000}
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY}
 
       # Use the URL you actually visit from your browser:
       # e.g. http://my-host.tld

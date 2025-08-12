@@ -60,8 +60,7 @@ active_commands = {}
 download_lock = threading.Lock()
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'
-
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
 command_process = None
 
@@ -84,7 +83,7 @@ app.logger.info(f"pdscript.conf -> {pdscript_conf_path}")
 postdownload_scripts_dir = os.path.join(base_dir, "scripts", "postdownload")
 run_all_script = os.path.join(postdownload_scripts_dir, "RunAll.py")
 sort_move_music_script = os.path.join(postdownload_scripts_dir, "Sort_MoveMusicDownloads.py")
-update_with_mb_script = os.path.join(postdownload_scripts_dir, "UpdatewithMB.sh"))
+update_with_mb_script = os.path.join(postdownload_scripts_dir, "UpdatewithMB.sh")
 
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
 
