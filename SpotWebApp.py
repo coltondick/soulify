@@ -59,23 +59,11 @@ active_commands = {}
 
 download_lock = threading.Lock()
 
-# Bootstrap configuration from environment variables
-def bootstrap_config_from_env():
-    cfg_dir = os.environ.get("CONFIG_DIR", "/config")
-    pd = os.path.join(cfg_dir, "pdscript.conf")
-    if not os.path.exists(pd):
-        write_pdscript_conf({
-            "destination_root": os.environ.get("DESTINATION_ROOT", "/downloads/Music Sorting"),
-            "new_artists_dir": os.environ.get("NEW_ARTISTS_DIR", "/downloads/Music New Artists"),
-            "unknown_albums_dir": os.environ.get("UNKNOWN_ALBUMS_DIR", "/downloads/Music Unknown Album"),
-            "API_BASE_URL": os.environ.get("API_BASE_URL", ""),
-            "API_AUTH_TOKEN": os.environ.get("API_AUTH_TOKEN", ""),
-            "main_music_library_id": os.environ.get("MAIN_MUSIC_LIBRARY_ID", ""),
-        }, pd)
+
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
-bootstrap_config_from_env()
+
 
 command_process = None
 
@@ -119,6 +107,20 @@ def _read_kv_file(path: str) -> dict:
         data[k.strip()] = v.strip().strip('"').strip("'")
     return data
 
+# Bootstrap configuration from environment variables
+def bootstrap_config_from_env():
+    cfg_dir = os.environ.get("CONFIG_DIR", "/config")
+    pd = os.path.join(cfg_dir, "pdscript.conf")
+    if not os.path.exists(pd):
+        write_pdscript_conf({
+            "destination_root": os.environ.get("DESTINATION_ROOT", "/downloads/Music Sorting"),
+            "new_artists_dir": os.environ.get("NEW_ARTISTS_DIR", "/downloads/Music New Artists"),
+            "unknown_albums_dir": os.environ.get("UNKNOWN_ALBUMS_DIR", "/downloads/Music Unknown Album"),
+            "API_BASE_URL": os.environ.get("API_BASE_URL", ""),
+            "API_AUTH_TOKEN": os.environ.get("API_AUTH_TOKEN", ""),
+            "main_music_library_id": os.environ.get("MAIN_MUSIC_LIBRARY_ID", ""),
+        }, pd)
+        
 def parse_sldl_conf(path: str) -> dict:
     """Parser used by /settings for sldl.conf (key=value)."""
     return _read_kv_file(path)
@@ -230,7 +232,6 @@ def write_sldl_conf(settings: dict, path: str | None = None):
     except IOError as e:
         logging.error(f"Error writing to {path}: {e}")
 
-
 # Function to write pdscript.conf
 def write_pdscript_conf(settings: dict, path: str | None = None):
     path = path or os.path.join(CONFIG_DIR, 'pdscript.conf')
@@ -252,6 +253,7 @@ def write_pdscript_conf(settings: dict, path: str | None = None):
     except IOError as e:
         logging.error(f"Error writing to {path}: {e}")
 
+bootstrap_config_from_env()
 
 def clean_special_chars(query):
     # First remove all commas
